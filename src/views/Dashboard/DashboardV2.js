@@ -1,65 +1,65 @@
-import React, { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
 import { useWeb3React } from "@web3-react/core";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import useSWR from "swr";
-import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import TooltipComponent from "../../components/Tooltip/Tooltip";
 
-import hexToRgba from "hex-to-rgba";
 import { ethers } from "ethers";
+import hexToRgba from "hex-to-rgba";
 
+import { currentFortnight, SECONDS_PER_WEEK } from "../../data/Fees";
 import { getWhitelistedTokens } from "../../data/Tokens";
-import { getFeeHistory, SECONDS_PER_WEEK } from "../../data/Fees";
 
 import {
-  fetcher,
-  formatAmount,
-  formatKeyAmount,
-  expandDecimals,
-  bigNumberify,
-  formatDate,
-  getChainName,
-  useChainId,
-  USD_DECIMALS,
-  MYC_DECIMALS,
-  MLP_DECIMALS,
-  BASIS_POINTS_DIVISOR,
-  ARBITRUM,
-  MLP_POOL_COLORS,
-  DEFAULT_MAX_USDG_AMOUNT,
-  getPageTitle,
-  ETH_DECIMALS,
-  ARBITRUM_GOERLI,
-} from "../../Helpers";
-import {
-  useTotalMYCInLiquidity,
-  useMYCPrice,
-  useTotalMYCSupply,
   useFees,
   useFeesSince,
-  useStakingApr,
-  useTotalStaked,
+  useMYCPrice,
   useSpreadCaptureVolume,
+  useStakingApr,
+  useTotalMYCInLiquidity,
+  useTotalMYCSupply,
+  useTotalStaked,
 } from "../../Api";
+import {
+  ARBITRUM,
+  ARBITRUM_GOERLI,
+  BASIS_POINTS_DIVISOR,
+  bigNumberify,
+  DEFAULT_MAX_USDG_AMOUNT,
+  ETH_DECIMALS,
+  expandDecimals,
+  fetcher,
+  formatAmount,
+  formatDate,
+  formatKeyAmount,
+  getChainName,
+  getPageTitle,
+  MLP_DECIMALS,
+  MLP_POOL_COLORS,
+  MYC_DECIMALS,
+  USD_DECIMALS,
+  useChainId,
+} from "../../Helpers";
 
 import { getContract } from "../../Addresses";
 
-import VaultV2 from "../../abis/VaultV2.json";
-import ReaderV2 from "../../abis/ReaderV2.json";
 import MlpManager from "../../abis/MlpManager.json";
+import ReaderV2 from "../../abis/ReaderV2.json";
+import VaultV2 from "../../abis/VaultV2.json";
 
 import "./DashboardV2.css";
 
-import mycToken from "../../img/ic_myc.svg";
-import mlp40Icon from "../../img/ic_mlp_40.svg";
 import arbitrum16Icon from "../../img/ic_arbitrum_16.svg";
 import arbitrum24Icon from "../../img/ic_arbitrum_24.svg";
+import mlp40Icon from "../../img/ic_mlp_40.svg";
+import mycToken from "../../img/ic_myc.svg";
 
-import AssetDropdown from "./AssetDropdown";
-import SEO from "../../components/Common/SEO";
 import { ADDRESS_ZERO } from "@uniswap/v3-sdk";
 import { useInfoTokens } from "src/hooks/useInfoTokens";
 import { getServerUrl } from "src/lib";
+import SEO from "../../components/Common/SEO";
+import AssetDropdown from "./AssetDropdown";
 
 const { AddressZero } = ethers.constants;
 
@@ -148,9 +148,10 @@ export default function DashboardV2() {
 
   const allFees = useFees(chainId);
 
-  const feeHistory = getFeeHistory(chainId);
+  // const feeHistory = getFeeHistory(chainId);
 
-  const from = feeHistory[0]?.to;
+  const from = currentFortnight;
+  // feeHistory[0]?.to;
   const to = from + SECONDS_PER_WEEK * 2;
   const currentGraphFees = useFeesSince(chainId, from, to);
   const currentUnclaimedFees = getUnclaimedFees(whitelistedTokenAddresses, infoTokens, fees);
@@ -170,9 +171,10 @@ export default function DashboardV2() {
   const totalMMFees = useSpreadCaptureVolume(chainId);
 
   let totalFees;
-  if (totalFeesDistributed && totalMMFees) {
-    totalFees = totalFeesDistributed.add(totalMMFees);
-  }
+  totalFees = totalFeesDistributed;
+  // if (totalFeesDistributed && totalMMFees) {
+  //   totalFees = totalFeesDistributed.add(totalMMFees);
+  // }
 
   const { mycPrice, mycPriceFromMainnet, mycPriceFromArbitrum } = useMYCPrice(
     chainId,
@@ -443,7 +445,8 @@ export default function DashboardV2() {
         <div className="section-title-block">
           <div className="section-title-content">
             <div className="Page-title">
-              Stats {(chainId === ARBITRUM || chainId === ARBITRUM_GOERLI) && (
+              Stats{" "}
+              {(chainId === ARBITRUM || chainId === ARBITRUM_GOERLI) && (
                 <img src={arbitrum24Icon} alt="arbitrum24Icon" />
               )}
             </div>
@@ -495,14 +498,10 @@ export default function DashboardV2() {
                   <div className="label">Short Positions</div>
                   <div>${formatAmount(totalShortPositionSizes, USD_DECIMALS, 0, true)}</div>
                 </div>
-                {feeHistory.length ? (
-                  <div className="App-card-row">
-                    <div className="label">Fees since {formatDate(feeHistory[0].to)}</div>
-                    <div>
-                      ${formatAmount(totalCurrentFees, USD_DECIMALS, 2, true)}
-                    </div>
-                  </div>
-                ) : null}
+                <div className="App-card-row">
+                  <div className="label">Fees since {formatDate(currentFortnight)}</div>
+                  <div>${formatAmount(totalCurrentFees, USD_DECIMALS, 2, true)}</div>
+                </div>
               </div>
             </div>
             <div className="App-card">
@@ -511,20 +510,7 @@ export default function DashboardV2() {
               <div className="App-card-content">
                 <div className="App-card-row">
                   <div className="label">Total Fees</div>
-                  <div>
-                    <TooltipComponent
-                      position="right-bottom"
-                      className="nowrap"
-                      handle={`$${formatAmount(totalFees, USD_DECIMALS, 0, true)}`}
-                      renderContent={() => (
-                        <>
-                          Distributed Fees: ${formatAmount(totalFeesDistributed, USD_DECIMALS, 0, true)}
-                          <br />
-                          Spread Capture: ${formatAmount(totalMMFees, USD_DECIMALS, 0, true)}
-                        </>
-                      )}
-                    />
-                  </div>
+                  <div>${formatAmount(totalFees, USD_DECIMALS, 0, true)}</div>
                 </div>
                 <div className="App-card-row">
                   <div className="label">Total Volume</div>
@@ -678,7 +664,7 @@ export default function DashboardV2() {
                   </div>
                 </div>
                 <div className="Button-container">
-                  <div className="Staking-btn">
+                  {/* <div className="Staking-btn">
                     <a href="https://stake.mycelium.xyz" target="_blank" rel="noopener noreferrer">
                       <button className="App-button-option App-card-option">MYC Staking</button>
                     </a>
@@ -691,7 +677,7 @@ export default function DashboardV2() {
                     >
                       <button className="App-button-option App-card-option">Buy MYC</button>
                     </a>
-                  </div>
+                  </div> */}
                 </div>
               </div>
               <div className="App-card">

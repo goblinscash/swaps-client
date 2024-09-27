@@ -1,75 +1,76 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { SWRConfig } from "swr";
 import { ethers } from "ethers";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { SWRConfig } from "swr";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
-import { Web3ReactProvider, useWeb3React } from "@web3-react/core";
 import { Web3Provider } from "@ethersproject/providers";
+import { Web3ReactProvider, useWeb3React } from "@web3-react/core";
 
-import { Switch, Route, NavLink, useLocation } from "react-router-dom";
+import { NavLink, Route, Switch, useLocation } from "react-router-dom";
 
 import { ThemeProvider } from "@tracer-protocol/tracer-ui";
-import { useAnalytics } from "./segmentAnalytics";
 import { getTokens, getWhitelistedTokens } from "./data/Tokens";
+import { useAnalytics } from "./segmentAnalytics";
 
 import {
-  SLIPPAGE_BPS_KEY,
+  CURRENT_PROVIDER_LOCALSTORAGE_KEY,
   IS_PNL_IN_LEVERAGE_KEY,
-  SHOW_PNL_AFTER_FEES_KEY,
-  SHOULD_SHOW_POSITION_LINES_KEY,
   REFERRAL_CODE_KEY,
   REFERRAL_CODE_QUERY_PARAMS,
   SHOULD_EAGER_CONNECT_LOCALSTORAGE_KEY,
-  CURRENT_PROVIDER_LOCALSTORAGE_KEY,
+  SHOULD_SHOW_POSITION_LINES_KEY,
+  SHOW_PNL_AFTER_FEES_KEY,
+  SLIPPAGE_BPS_KEY,
 } from "./config/localstorage";
 
 import {
   ARBITRUM,
   ARBITRUM_GOERLI,
-  DEFAULT_SLIPPAGE_AMOUNT,
   BASIS_POINTS_DIVISOR,
-  fetcher,
-  clearWalletConnectData,
-  switchNetwork,
-  helperToast,
-  getChainName,
-  useChainId,
-  getAccountUrl,
-  getInjectedHandler,
-  useEagerConnect,
-  useLocalStorageSerializeKey,
-  useInactiveListener,
-  getExplorerUrl,
-  getWalletConnectHandler,
+  DEFAULT_SLIPPAGE_AMOUNT,
+  PLACEHOLDER_ACCOUNT,
   activateInjectedProvider,
-  hasMetaMaskWalletExtension,
-  hasCoinBaseWalletExtension,
-  isMobileDevice,
+  clearWalletConnectData,
   clearWalletLinkData,
-  getBalanceAndSupplyData,
+  fetcher,
   formatAmount,
   formatTitleCase,
-  getUserTokenBalances,
-  hasChangedAccount,
-  setCurrentAccount,
-  networkOptions,
-  PLACEHOLDER_ACCOUNT,
+  getAccountUrl,
+  getBalanceAndSupplyData,
+  getChainName,
+  getDefaultArbitrumGoerliRpcUrl,
   getDefaultArbitrumRpcUrl,
+  getExplorerUrl,
+  getInjectedHandler,
+  getUserTokenBalances,
+  getWalletConnectHandler,
+  hasChangedAccount,
+  hasCoinBaseWalletExtension,
+  hasMetaMaskWalletExtension,
+  helperToast,
+  isMobileDevice,
+  networkOptions,
+  setCurrentAccount,
+  switchNetwork,
+  useChainId,
+  useEagerConnect,
+  useInactiveListener,
+  useLocalStorageSerializeKey,
 } from "./Helpers";
 import ReaderV2 from "./abis/ReaderV2.json";
 
-import Dashboard from "./views/Dashboard/DashboardV2";
-import Stake from "./views/Stake/StakeV2";
-import { Exchange } from "./views/Exchange/Exchange";
 import Actions from "./views/Actions/Actions";
+import Dashboard from "./views/Dashboard/DashboardV2";
+import { Exchange } from "./views/Exchange/Exchange";
 import OrdersOverview from "./views/OrdersOverview/OrdersOverview";
 import PositionsOverview from "./views/PositionsOverview/PositionsOverview";
+import Stake from "./views/Stake/StakeV2";
 // import BuyMYC from "./views/BuyMYC/BuyMYC";
 import BuyMlp from "./views/BuyMlp/BuyMlp";
-import SellMlp from "./views/SellMlp/SellMlp";
-import Rewards from "./views/Rewards/Rewards";
 import Referrals from "./views/Referrals/Referrals";
+import Rewards from "./views/Rewards/Rewards";
+import SellMlp from "./views/SellMlp/SellMlp";
 // import NftWallet from "./views/NftWallet/NftWallet";
 // import BeginAccountTransfer from "./views/BeginAccountTransfer/BeginAccountTransfer";
 // import CompleteAccountTransfer from "./views/CompleteAccountTransfer/CompleteAccountTransfer";
@@ -78,51 +79,52 @@ import ConsentModal from "./components/ConsentModal/ConsentModal";
 import MobileLinks from "./components/Navigation/MobileNav";
 
 import cx from "classnames";
-import { cssTransition, ToastContainer } from "react-toastify";
+import { ToastContainer, cssTransition } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import NetworkSelector from "./components/NetworkSelector/NetworkSelector";
-import Modal from "./components/Modal/Modal";
 import Checkbox from "./components/Checkbox/Checkbox";
+import Modal from "./components/Modal/Modal";
+import NetworkSelector from "./components/NetworkSelector/NetworkSelector";
 // import Footer from "./Footer";
 
-import { RiMenuLine } from "react-icons/ri";
 import { FaTimes } from "react-icons/fa";
 import { FiX } from "react-icons/fi";
+import { RiMenuLine } from "react-icons/ri";
 
-import "./Font.css";
-import "./Shared.css";
 import "./App.css";
-import "./Input.css";
 import "./AppOrder.css";
+import "./Font.css";
+import "./Input.css";
+import "./Shared.css";
 
 import logoImg from "./img/logo_MYC.svg";
 import logoSmallImg from "./img/logo_MYC_small.svg";
 // import poolsSmallImg from "./img/myc_pools_short.svg";
 import connectWalletImg from "./img/ic_wallet_24.svg";
 
-import metamaskImg from "./img/metamask.png";
-import coinbaseImg from "./img/coinbaseWallet.png";
-import walletConnectImg from "./img/walletconnect-circle-blue.svg";
+import { Link } from "react-router-dom";
+import { encodeReferralCode } from "./Api/referrals";
 import AddressDropdown from "./components/AddressDropdown/AddressDropdown";
 import { ConnectWalletButton } from "./components/Common/Button";
-import useEventToast from "./components/EventToast/useEventToast";
-import { Link } from "react-router-dom";
 import EventToastContainer from "./components/EventToast/EventToastContainer";
+import useEventToast from "./components/EventToast/useEventToast";
 import useRouteQuery from "./hooks/useRouteQuery";
-import { encodeReferralCode } from "./Api/referrals";
+import coinbaseImg from "./img/coinbaseWallet.png";
+import metamaskImg from "./img/metamask.png";
+import walletConnectImg from "./img/walletconnect-circle-blue.svg";
 
+import useSWR from "swr";
 import { getContract } from "./Addresses";
+import PositionRouter from "./abis/PositionRouter.json";
 import VaultV2 from "./abis/VaultV2.json";
 import VaultV2b from "./abis/VaultV2b.json";
-import PositionRouter from "./abis/PositionRouter.json";
-import PageNotFound from "./views/PageNotFound/PageNotFound";
-import useSWR from "swr";
+import AppDropdown from "./components/AppDropdown/AppDropdown";
+import EventModal from "./components/EventModal/EventModal";
 import LinkDropdown from "./components/Navigation/LinkDropdown/LinkDropdown";
 import Sidebar from "./components/Navigation/Sidebar/Sidebar";
-import EventModal from "./components/EventModal/EventModal";
-import AppDropdown from "./components/AppDropdown/AppDropdown";
+import { LeaderboardProvider } from "./context/LeaderboardContext";
 import { useInfoTokens } from "./hooks/useInfoTokens";
-// import { Banner, BannerContent } from "./components/Banner/Banner";
+import PageNotFound from "./views/PageNotFound/PageNotFound";
+// import { Banner, BannerTitle, BannerContent } from "./components/Banner/Banner";
 
 if ("ethereum" in window) {
   window.ethereum.autoRefreshOnNetworkChange = false;
@@ -147,7 +149,7 @@ function inPreviewMode() {
 }
 
 const arbWsProvider = new ethers.providers.WebSocketProvider(getDefaultArbitrumRpcUrl(true));
-const arbTestnetWsProvider = new ethers.providers.JsonRpcProvider("https://goerli-rollup.arbitrum.io/rpc/");
+const arbTestnetWsProvider = new ethers.providers.JsonRpcProvider(getDefaultArbitrumGoerliRpcUrl(true));
 
 function getWsProvider(active, chainId) {
   if (!active) {
@@ -310,7 +312,7 @@ function AppHeaderUser({
         >
           {small ? "Connect" : "Connect Wallet"}
         </ConnectWalletButton>
-        <AppDropdown />
+        {/* <AppDropdown /> */}
       </div>
     );
   }
@@ -342,7 +344,7 @@ function AppHeaderUser({
           trackAction={trackAction}
         />
       </div>
-      <AppDropdown />
+      {/* <AppDropdown /> */}
     </div>
   );
 }
@@ -717,6 +719,34 @@ function FullApp() {
           "full-width": sidebarVisible,
         })}
       >
+        {/* <div style={{ height: "56px" }} />
+        <div
+          className="banner"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            zIndex: 50,
+            paddingTop: "12px",
+            paddingBottom: "12px",
+            width: "100%",
+            textAlign: "center",
+            backgroundColor: "rgba(251, 191, 36)",
+            fontWeight: "bold",
+            color: "black",
+          }}
+        >
+          Please read this blog{" "}
+          <a
+            target="_blank"
+            rel="noopener noreferrer"
+            href="https://mycelium.xyz/blog/the-future-of-mycelium"
+            style={{ color: "black" }}
+          >
+            this blog post
+          </a>
+          , and close your positions.
+        </div> */}
         {/* <div className="App-background-side-1"></div>
         <div className="App-background-side-2"></div>
         <div className="App-background"></div>
@@ -757,7 +787,7 @@ function FullApp() {
           <nav>
             <div className="App-header large default-container">
               <div className="App-header-container-left">
-                <Link
+                {/* <Link
                   className="App-header-link-main"
                   to="/"
                   onClick={() =>
@@ -769,10 +799,11 @@ function FullApp() {
                 >
                   <img src={logoImg} className="big" alt="Mycelium Swaps Logo" />
                   <img src={logoSmallImg} className="small" alt="Mycelium Swaps Logo" />
-                </Link>
+                </Link> */}
               </div>
               <div className="App-header-container-right">
                 {/* <AppHeaderLinks trackAction={trackAction} /> */}
+                <a style={{ marginRight: "16px" }} href="https://mycelium.xyz">Mycelium Home</a>
                 <AppHeaderUser
                   disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
                   openSettings={openSettings}
@@ -791,7 +822,7 @@ function FullApp() {
                 })}
               >
                 <div className="App-header-container-left">
-                  <Link
+                  {/* <Link
                     className="App-header-link-main clickable"
                     to="/"
                     onClick={() => {
@@ -803,12 +834,13 @@ function FullApp() {
                   >
                     <img src={logoSmallImg} className="small" alt="Mycelium Swaps Logo" />
                     <img src={logoImg} className="big" alt="Mycelium Swaps Logo" />
-                  </Link>
+                  </Link> */}
                 </div>
                 <div>
                   <div className="App-header-container-right">
-                    <AppHeaderLinks trackAction={trackAction} />
-                    <LinkDropdown />
+                    {/* <AppHeaderLinks trackAction={trackAction} /> */}
+                    {/* <LinkDropdown /> */}
+                    <Link style={{ marginRight: "16px" }} href="https://mycelium.xyz">Mycelium Home</Link>
                     <AppHeaderUser
                       disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
                       openSettings={openSettings}
@@ -827,7 +859,7 @@ function FullApp() {
                       </NavLink>
                     </div>
                   )}
-                  <AppDropdown isMobile />
+                  {/* <AppDropdown isMobile /> */}
                   {/* Hamburger menu */}
                   <button className="App-header-menu-icon-block" onClick={() => setIsDrawerVisible(!isDrawerVisible)}>
                     <span />
@@ -855,18 +887,8 @@ function FullApp() {
               disconnectAccountAndCloseSettings={disconnectAccountAndCloseSettings}
             />
           </div>
-          {/* <div className="default-container">
-            <Banner>
-              <BannerTitle>
-                ARBITRUM NITRO UPGRADE IN PROGRESS
-              </BannerTitle>
-              <BannerContent>
-                The Arbitrum Network is expected to have 2-4 hours of downtime as it makes it's upgrade to Nitro. Trades may not go through during this period.
-              </BannerContent>
-            </Banner>
-          </div> */}
           <Switch>
-            <Route exact path="/">
+            {/* <Route exact path="/">
               <Exchange
                 ref={exchangeRef}
                 savedShowPnlAfterFees={savedShowPnlAfterFees}
@@ -898,8 +920,8 @@ function FullApp() {
                 infoTokens={infoTokens}
                 savedSlippageAmount={savedSlippageAmount}
               />
-            </Route>
-            <Route exact path="/buy_mlp">
+            </Route> */}
+            <Route path="*">
               <BuyMlp
                 savedSlippageAmount={savedSlippageAmount}
                 setPendingTxns={setPendingTxns}
@@ -909,7 +931,7 @@ function FullApp() {
                 analytics={analytics}
               />
             </Route>
-            <Route exact path="/sell_mlp">
+            {/* <Route exact path="/sell_mlp">
               <SellMlp
                 savedSlippageAmount={savedSlippageAmount}
                 setPendingTxns={setPendingTxns}
@@ -936,13 +958,13 @@ function FullApp() {
                 pendingTxns={pendingTxns}
                 setPendingTxns={setPendingTxns}
               />
-            </Route>
+            </Route> */}
             {/*
             <Route exact path="/nft_wallet">
               <NftWallet />
             </Route>
             */}
-            <Route exact path="/actions/:account">
+            {/* <Route exact path="/actions/:account">
               <Actions trackAction={trackAction} />
             </Route>
             <Route exact path="/orders_overview">
@@ -953,7 +975,7 @@ function FullApp() {
             </Route>
             <Route exact path="/actions">
               <Actions trackAction={trackAction} />
-            </Route>
+            </Route> */}
             {/*
             <Route exact path="/begin_account_transfer">
               <BeginAccountTransfer setPendingTxns={setPendingTxns} />
@@ -967,12 +989,12 @@ function FullApp() {
             <Route exact path="/referral-terms">
               <ReferralTerms />
             </Route> */}
-            <Route path="*">
+            {/* <Route path="*">
               <PageNotFound />
-            </Route>
+            </Route> */}
           </Switch>
         </div>
-        <Sidebar sidebarVisible={sidebarVisible} setSidebarVisible={setSidebarVisible} />
+        {/* <Sidebar sidebarVisible={sidebarVisible} setSidebarVisible={setSidebarVisible} /> */}
         {/* <Footer /> */}
       </div>
       <ToastContainer
@@ -986,14 +1008,14 @@ function FullApp() {
         draggable={false}
         pauseOnHover
       />
-      <EventModal
-        isModalVisible={isEventModalVisible}
-        setEventModalVisible={setEventModalVisible}
-        eventKey={"referrals-comp"}
-        twitterButtonText={"Share your code for a chance to win"}
-        twitterText={`🍄🍄🍄 @mycelium_xyz IYKYK\n\nUse my code for a discount: [insert code]\nhttps://swaps.mycelium.xyz/referrals`}
-      />
       <EventToastContainer />
+      {/* <EventModal
+        isModalVisible={isEventModalVisible
+        setEventModalVisible={setEventModalVisible}
+        eventKey="seenPopupV4"
+        hideHeader={true}
+        requiresConfirmation={true}
+      /> */}
       <Modal
         className="Connect-wallet-modal"
         isVisible={walletModalVisible}
@@ -1160,9 +1182,6 @@ function PreviewApp() {
                   MYC
                 </NavLink>
               </div>
-              <div className="App-header-container-right">
-                <AppHeaderLinks />
-              </div>
             </div>
             <div className={cx("App-header", "small", { active: isDrawerVisible })}>
               <div
@@ -1216,9 +1235,11 @@ function App() {
   if (inPreviewMode()) {
     return (
       <Web3ReactProvider getLibrary={getLibrary}>
-        <ThemeProvider>
-          <PreviewApp />
-        </ThemeProvider>
+        <LeaderboardProvider>
+          <ThemeProvider>
+            <PreviewApp />
+          </ThemeProvider>
+        </LeaderboardProvider>
       </Web3ReactProvider>
     );
   }
@@ -1226,10 +1247,12 @@ function App() {
   return (
     <SWRConfig value={{ refreshInterval: 5000 }}>
       <Web3ReactProvider getLibrary={getLibrary}>
-        <ThemeProvider>
-          <FullApp />
-        </ThemeProvider>
-        <ConsentModal hasConsented={hasConsented} setConsented={setConsented} />
+        <LeaderboardProvider>
+          <ThemeProvider>
+            <FullApp />
+          </ThemeProvider>
+          <ConsentModal hasConsented={hasConsented} setConsented={setConsented} />
+        </LeaderboardProvider>
       </Web3ReactProvider>
     </SWRConfig>
   );

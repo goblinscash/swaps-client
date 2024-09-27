@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 
 import useSWR from "swr";
+import { useLocation } from "react-router-dom";
 
 import {
   getPageTitle,
@@ -12,6 +13,7 @@ import {
   ETH_DECIMALS,
   helperToast,
   useLocalStorageSerializeKey,
+  getOffsetRewardRound
 } from "../../Helpers";
 import { useWeb3React } from "@web3-react/core";
 import { callContract } from "../../Api";
@@ -51,6 +53,7 @@ const LeaderboardHeader = () => (
 );
 
 export default function Rewards(props) {
+  const location = useLocation();
   const { connectWallet, trackPageWithTraits, trackAction, analytics, setPendingTxns, infoTokens } = props;
 
   const { chainId } = useChainId();
@@ -121,7 +124,7 @@ export default function Rewards(props) {
           }
           let unclaimedRewards = totals.unclaimedRewards;
           const userReward = ethers.BigNumber.from(trader.reward).add(trader.degen_reward);
-          if (hasClaimed && !hasClaimed[round.round]) {
+          if (hasClaimed && !hasClaimed[getOffsetRewardRound(round.round)]) {
             unclaimedRewards = unclaimedRewards.add(userReward);
           }
           return {
@@ -290,7 +293,7 @@ export default function Rewards(props) {
       error = true;
     }
     if (userProof.amount === "0") {
-      helperToast.error(`No rewards for round: ${selectedRound}`);
+      helperToast.error(`No rewards for round: ${selectedRound + 1}`);
       error = true;
     }
     if (!!userProof?.message) {
@@ -309,7 +312,7 @@ export default function Rewards(props) {
       [
         userProof.merkleProof, // proof
         userProof.amount, // amount
-        selectedRound, // round
+        getOffsetRewardRound(selectedRound)
       ],
       {
         sentMsg: "Claim submitted!",
@@ -325,8 +328,15 @@ export default function Rewards(props) {
   const isLatestRound = selectedRound === "latest";
   let hasClaimedRound;
   if (selectedRound !== "latest" && hasClaimed) {
-    hasClaimedRound = hasClaimed[selectedRound];
+    hasClaimedRound = hasClaimed[getOffsetRewardRound(selectedRound)];
   }
+
+  useEffect(() => {
+    const hash = location.hash;
+    if (hash === "#leaderboard") {
+      setCurrentView("Leaderboard");
+    }
+  }, [location.hash, setCurrentView]);
 
   return (
     <>

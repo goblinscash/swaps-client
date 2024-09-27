@@ -1,45 +1,46 @@
-import { useEffect, useRef } from "react";
-import { NavLink } from "react-router-dom";
-import { Link } from "react-router-dom";
+import { useWeb3React } from "@web3-react/core";
+import { useContext, useEffect, useRef } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { LiveLeaderboard } from "src/components/Navigation/Sidebar/LiveLeaderboard";
 import {
-  MenuContainer,
-  SideMenu,
-  Logo,
-  NavMenu,
-  MenuItem,
   BottomMenuItem,
-  PullTab,
-  SocialLinksMenu,
   CopyrightYear,
-  LegalMenu,
-  FixedContainer,
   EventBox,
-  EventHeader,
   EventContent,
-  EventGraphic,
-  ViewNowButton,
   EventDescription,
+  EventGraphic,
+  EventHeader,
   EventTitle,
+  FixedContainer,
+  LegalMenu,
+  Logo,
+  MenuContainer,
+  MenuItem,
+  NavMenu,
+  PullTab,
+  SideMenu,
+  SocialLinksMenu,
 } from "./Sidebar.styles";
 
-import { ReactComponent as TradeIcon } from "../../../img/nav/trade.svg";
+import { ReactComponent as BuyIcon } from "../../../img/nav/buy.svg";
 import { ReactComponent as DashboardIcon } from "../../../img/nav/dashboard.svg";
 import { ReactComponent as EarnIcon } from "../../../img/nav/earn.svg";
-import { ReactComponent as BuyIcon } from "../../../img/nav/buy.svg";
-import { ReactComponent as RewardsIcon } from "../../../img/nav/rewards.svg";
-import { ReactComponent as ReferralsIcon } from "../../../img/nav/referrals.svg";
 import { ReactComponent as MycStakingIcon } from "../../../img/nav/myc-staking.svg";
+import { ReactComponent as ReferralsIcon } from "../../../img/nav/referrals.svg";
+import { ReactComponent as RewardsIcon } from "../../../img/nav/rewards.svg";
+import { ReactComponent as TradeIcon } from "../../../img/nav/trade.svg";
 // import { ReactComponent as LeaderboardIcon } from "../../../img/nav/trading-leaderboard.svg";
 import { ReactComponent as AnalyticsIcon } from "../../../img/nav/analytics.svg";
+import { ReactComponent as DiscordIcon } from "../../../img/nav/discord.svg";
 import { ReactComponent as DocsIcon } from "../../../img/nav/docs.svg";
 import { ReactComponent as GithubIcon } from "../../../img/nav/github.svg";
-import { ReactComponent as TwitterIcon } from "../../../img/nav/twitter.svg";
-import { ReactComponent as DiscordIcon } from "../../../img/nav/discord.svg";
 import { ReactComponent as PullTabSvg } from "../../../img/nav/pull-tab.svg";
+import { ReactComponent as TwitterIcon } from "../../../img/nav/twitter.svg";
 // import { ReactComponent as TranslateIcon } from "../../../img/nav/translate.svg";
-import graphic from "../../../img/nav/event-graphic.png";
-
+import { LeaderboardContext } from "src/context/LeaderboardContext";
 import logoImg from "../../../img/logo_MYC.svg";
+import graphic from "../../../img/nav/event-graphic.png";
+import liveIcon from "../../../img/nav/live.svg";
 
 const navTopLinks = [
   {
@@ -93,6 +94,9 @@ const socialLinks = [
 ];
 
 export default function Sidebar({ sidebarVisible, setSidebarVisible }) {
+  const { active, account } = useWeb3React();
+  const location = useLocation();
+  const { leaderboardData, userPosition, failedFetchingRoundRewards, rewardIndicator } = useContext(LeaderboardContext);
   const yearRef = useRef(null);
 
   const setYear = () => {
@@ -111,7 +115,7 @@ export default function Sidebar({ sidebarVisible, setSidebarVisible }) {
       </PullTab>
       <SideMenu visible={sidebarVisible}>
         <Logo visible={sidebarVisible}>
-          <NavLink exact className="App-header-link-main" to="/">
+          <NavLink className="App-header-link-main" to="/">
             <img src={logoImg} alt="Perpetual Swaps Logo" />
           </NavLink>
         </Logo>
@@ -138,17 +142,32 @@ export default function Sidebar({ sidebarVisible, setSidebarVisible }) {
                 </a>
               </MenuItem>
             </NavMenu>
-            <EventBox>
-              <EventHeader>WHAT'S HAPPENING THIS WEEK</EventHeader>
-              <EventContent>
-                <EventGraphic src={graphic} />
-                <EventTitle>Mycelium Referrals Competition</EventTitle>
-                <EventDescription>Win $20,000 USDC in prizes for sharing the trading spirit.</EventDescription>
-                <Link to="/referrals#leaderboard">
-                  <ViewNowButton>View Now</ViewNowButton>
-                </Link>
-              </EventContent>
-            </EventBox>
+            {active && userPosition > 0 && !failedFetchingRoundRewards ? (
+              <LiveLeaderboard
+                account={account}
+                location={location}
+                userPosition={userPosition}
+                leaderboardData={leaderboardData}
+                rewardIndicator={rewardIndicator}
+              />
+            ) : (
+              <EventBox>
+                <EventHeader>
+                  <span>TRADING LEADERBOARD</span>
+                  <span>
+                    <img src={liveIcon} alt="live" />
+                    &nbsp;LIVE
+                  </span>
+                </EventHeader>
+                <EventContent>
+                  <EventGraphic src={graphic} />
+                  <EventTitle>Optimising your trades with Mycelium.</EventTitle>
+                  <EventDescription>Trade Now to join the Leaderboard</EventDescription>
+                  {/* <Link to="/">{location?.pathname !== "/" && <TradeNowButton>Trade Now</TradeNowButton>}</Link> */}
+                </EventContent>
+              </EventBox>
+            )}
+
             <BottomMenuItem>
               <a
                 href="https://swaps.docs.mycelium.xyz/perpetual-swaps/mycelium-perpetual-swaps"

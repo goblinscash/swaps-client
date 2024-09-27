@@ -1,92 +1,96 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-
-import Tooltip from "../Tooltip/Tooltip";
+import cx from "classnames";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Modal from "../Modal/Modal";
+import Tooltip from "../Tooltip/Tooltip";
 
-import useSWR from "swr";
 import { ethers } from "ethers";
+import useSWR from "swr";
 
-import { IoMdSwap } from "react-icons/io";
 import { BsArrowRight } from "react-icons/bs";
+import { IoMdSwap } from "react-icons/io";
 
+import { getContract } from "../../Addresses";
+import * as Api from "../../Api";
+import { getConstant } from "../../Constants";
 import {
-  helperToast,
-  formatAmount,
-  bigNumberify,
-  USD_DECIMALS,
-  USDG_DECIMALS,
-  LONG,
-  SHORT,
-  SWAP,
-  MARKET,
-  SWAP_ORDER_OPTIONS,
-  LEVERAGE_ORDER_OPTIONS,
-  DEFAULT_HIGHER_SLIPPAGE_AMOUNT,
-  getPositionKey,
-  getUsd,
-  BASIS_POINTS_DIVISOR,
-  MARGIN_FEE_BASIS_POINTS,
-  PRECISION,
-  USDG_ADDRESS,
-  STOP,
-  LIMIT,
-  SWAP_OPTIONS,
-  DUST_BNB,
-  isTriggerRatioInverted,
-  usePrevious,
-  formatAmountFree,
-  fetcher,
-  parseValue,
-  expandDecimals,
-  shouldRaiseGasError,
-  getTokenInfo,
-  getLiquidationPrice,
+  adjustForDecimals,
   approveTokens,
-  getLeverage,
-  isSupportedChain,
+  BASIS_POINTS_DIVISOR,
+  bigNumberify,
+  calculatePositionDelta,
+  DEFAULT_HIGHER_SLIPPAGE_AMOUNT,
+  DUST_BNB,
+  expandDecimals,
+  fetcher,
+  formatAmount,
+  formatAmountFree,
   getExchangeRate,
   getExchangeRateDisplay,
-  getNextToAmount,
-  getNextFromAmount,
+  getLeverage,
+  getLiquidationPrice,
   getMostAbundantStableToken,
-  useLocalStorageSerializeKey,
-  useLocalStorageByChainId,
-  calculatePositionDelta,
-  replaceNativeTokenAddress,
-  adjustForDecimals,
-  isHashZero,
-  NETWORK_NAME,
+  getNextFromAmount,
+  getNextToAmount,
+  getPositionKey,
   getSpread,
+  getTokenInfo,
+  getUsd,
   getUserTokenBalances,
+  helperToast,
+  isHashZero,
+  isSupportedChain,
+  isTriggerRatioInverted,
+  LEVERAGE_ORDER_OPTIONS,
+  LIMIT,
+  limitDecimals,
+  LONG,
+  MARGIN_FEE_BASIS_POINTS,
+  MARKET,
+  NETWORK_NAME,
+  parseValue,
+  PRECISION,
+  replaceNativeTokenAddress,
+  SHORT,
+  shouldRaiseGasError,
+  STOP,
+  SWAP,
+  SWAP_OPTIONS,
+  SWAP_ORDER_OPTIONS,
+  USD_DECIMALS,
+  USDG_ADDRESS,
+  USDG_DECIMALS,
+  useLocalStorageByChainId,
+  useLocalStorageSerializeKey,
+  usePrevious,
 } from "../../Helpers";
-import { getConstant } from "../../Constants";
-import * as Api from "../../Api";
-import { getContract } from "../../Addresses";
 
 import Tab from "../Tab/Tab";
-import TokenSelector from "./TokenSelector";
-import ExchangeInfoRow from "./ExchangeInfoRow";
 import ConfirmationBox from "./ConfirmationBox";
+import ExchangeInfoRow from "./ExchangeInfoRow";
 import OrdersToa from "./OrdersToa";
+import TokenSelector from "./TokenSelector";
 
-import { getTokens, getWhitelistedTokens, getToken, getTokenBySymbol } from "../../data/Tokens";
+import PositionCreator from "../../abis/PositionCreator.json";
 import PositionRouter from "../../abis/PositionRouter.json";
 import Router from "../../abis/Router.json";
 import Token from "../../abis/Token.json";
 import WETH from "../../abis/WETH.json";
+import { getToken, getTokenBySymbol, getTokens, getWhitelistedTokens } from "../../data/Tokens";
 
+import { useUserReferralCode } from "../../Api/referrals";
+import { REFERRAL_CODE_KEY } from "../../config/localstorage";
 import longImg from "../../img/long.svg";
 import shortImg from "../../img/short.svg";
 import swapImg from "../../img/swap.svg";
-import { useUserReferralCode } from "../../Api/referrals";
-import {  getMaxLeverage , LeverageInput } from "./LeverageInput";
-import { REFERRAL_CODE_KEY } from "../../config/localstorage";
+import { getMaxLeverage, LeverageInput } from "./LeverageInput";
+import { TriggerCreator } from "./TriggerCreator";
 
 const SWAP_ICONS = {
   [LONG]: longImg,
   [SHORT]: shortImg,
   [SWAP]: swapImg,
 };
+
 const { AddressZero } = ethers.constants;
 
 function getNextAveragePrice({ size, sizeDelta, hasProfit, delta, nextPrice, isLong }) {
@@ -244,19 +248,51 @@ export default function SwapBox(props) {
 
   const whitelistedTokens = getWhitelistedTokens(chainId);
   const tokens = getTokens(chainId);
-  const fromTokens = tokens;
+  const enabledTokens = tokens.filter((token) => token.isEnabledForTrading);
+  const fromTokens = enabledTokens;
   const stableTokens = tokens.filter((token) => token.isStable);
   const indexTokens = whitelistedTokens.filter((token) => !token.isStable && !token.isWrapped);
-  const shortableTokens = indexTokens.filter((token) => token.isShortable);
+  const enabledIndexTokens = whitelistedTokens.filter((token) => token.isEnabledForTrading);
+  const shortableTokens = indexTokens.filter((token) => token.isShortable && token.isEnabledForTrading);
   let toTokens = tokens;
   if (isLong) {
-    toTokens = indexTokens;
+    toTokens = enabledIndexTokens;
   }
   if (isShort) {
     toTokens = shortableTokens;
   }
 
-  const needOrderBookApproval = !isMarketOrder && !orderBookApproved;
+  const isToTokenEnabled = useMemo(
+    () => tokens.find((token) => token.address === toTokenAddress)?.isEnabledForTrading,
+    [tokens, toTokenAddress]
+  );
+
+  // Only allow toTokenAddress if it is not included as a disabled token or if the swapOption is Swap
+  const checkedToTokenAddress = useMemo(
+    () => (swapOption !== SWAP && !isToTokenEnabled ? AddressZero : toTokenAddress),
+    [swapOption, toTokenAddress, isToTokenEnabled]
+  );
+
+  const triggerReferencePrice = isShort ? infoTokens[toTokenAddress].maxPrice : infoTokens[toTokenAddress].minPrice;
+  const [stopLossTriggerPercent, setStopLossTriggerPercent] = React.useState(null); // number or null
+  const [takeProfitTriggerPercent, setTakeProfitTriggerPercent] = React.useState(null); // number or null
+
+  const stopLossTriggerPrice = calculateTriggerPrice(stopLossTriggerPercent, leverageOption, true);
+  const takeProfitTriggerPrice = calculateTriggerPrice(takeProfitTriggerPercent, leverageOption, false);
+
+  function calculateTriggerPrice(pnlPercent, leverage, isStopLoss) {
+    const PERCENT_PRECISION = 10000;
+    if (!pnlPercent) return null;
+    const priceMovePrecision = Math.round((pnlPercent * PERCENT_PRECISION) / leverage);
+    if (isLong ? isStopLoss : !isStopLoss) {
+      return triggerReferencePrice.mul(PERCENT_PRECISION - priceMovePrecision).div(PERCENT_PRECISION);
+    } else {
+      return triggerReferencePrice.mul(PERCENT_PRECISION + priceMovePrecision).div(PERCENT_PRECISION);
+    }
+  }
+
+  const needOrderBookApproval =
+    !orderBookApproved && (!isMarketOrder || stopLossTriggerPercent || takeProfitTriggerPercent);
   const prevNeedOrderBookApproval = usePrevious(needOrderBookApproval);
 
   const needPositionRouterApproval = (isLong || isShort) && isMarketOrder && !positionRouterApproved;
@@ -311,22 +347,90 @@ export default function SwapBox(props) {
 
   const fromTokenInfo = getTokenInfo(infoTokens, fromTokenAddress);
   const toTokenInfo = getTokenInfo(infoTokens, toTokenAddress);
-  const toTokenAvailableUsd = toTokenInfo.availableUsd;
-
-  const renderAvailableLongLiquidity = () => {
-    if (!isLong) {
-      return null;
-    }
-
-    return (
-      <div className="Exchange-info-row">
-        <div className="Exchange-info-label">Available Liquidity</div>
-        <div className="align-right">{formatAmount(toTokenAvailableUsd, USD_DECIMALS, 2, true)}</div>
-      </div>
-    );
-  };
 
   const hasMaxAvailableShort = isShort && toTokenInfo.maxAvailableShort && toTokenInfo.maxAvailableShort.gt(0);
+
+  const renderAvailableLiquidity = () => {
+    if (!isLong && hasMaxAvailableShort) {
+      return (
+        <div className="Exchange-info-row">
+          <div className="Exchange-info-label">Available Liquidity</div>
+          <div className="align-right">
+            <Tooltip
+              handle={`${formatAmount(toTokenInfo.maxAvailableShort, USD_DECIMALS, 2, true)}`}
+              position="right-bottom"
+              renderContent={() => {
+                return (
+                  <>
+                    Max {toTokenInfo.symbol} short capacity: $
+                    {formatAmount(toTokenInfo.maxGlobalShortSize, USD_DECIMALS, 2, true)}
+                    <br />
+                    <br />
+                    Current {toTokenInfo.symbol} shorts: $
+                    {formatAmount(toTokenInfo.globalShortSize, USD_DECIMALS, 2, true)}
+                    <br />
+                  </>
+                );
+              }}
+            ></Tooltip>
+          </div>
+        </div>
+      );
+    } else if (isLong) {
+      return (
+        <div className="Exchange-info-row">
+          <div className="Exchange-info-label">Available Liquidity</div>
+          <div className="align-right">
+            <Tooltip
+              handle={`$${formatAmount(toTokenInfo.maxAvailableLong, USD_DECIMALS, 2, true)}`}
+              position="right-bottom"
+              renderContent={() => {
+                return (
+                  <>
+                    Max {toTokenInfo.symbol} long capacity: $
+                    {formatAmount(toTokenInfo.maxLongCapacity, USD_DECIMALS, 0, true)}
+                    <br />
+                    <br />
+                    Current {toTokenInfo.symbol} longs: $
+                    {formatAmount(toTokenInfo.guaranteedUsd, USD_DECIMALS, 0, true)}
+                    <br />
+                  </>
+                );
+              }}
+            ></Tooltip>
+          </div>
+        </div>
+      );
+    } else if (isSwap) {
+      return (
+        <div className="Exchange-info-row">
+          <div className="Exchange-info-label">Available Liquidity</div>
+          <div className="align-right al-swap">
+            <Tooltip
+              handle={`$${formatAmount(maxSwapAmountUsd, USD_DECIMALS, 2, true)}`}
+              position="right-bottom"
+              renderContent={() => {
+                return (
+                  <>
+                    {`Max ${fromTokenInfo.symbol} in: `}
+                    {formatAmount(maxFromTokenIn, fromTokenInfo.decimals, 0, true)} {fromTokenInfo.symbol} ($
+                    {formatAmount(maxFromTokenInUSD, USD_DECIMALS, 0, true)})
+                    <br />
+                    <br />
+                    {`Max ${toTokenInfo.symbol} out: `}
+                    {formatAmount(maxToTokenOut, toTokenInfo.decimals, 0, true)} {toTokenInfo.symbol} ($
+                    {formatAmount(maxToTokenOutUSD, USD_DECIMALS, 0, true)})
+                    <br />
+                  </>
+                );
+              }}
+            />
+          </div>
+        </div>
+      );
+    } // else
+    return null;
+  };
 
   const fromBalance = fromTokenInfo ? fromTokenInfo.balance : bigNumberify(0);
   const toBalance = toTokenInfo ? toTokenInfo.balance : bigNumberify(0);
@@ -373,6 +477,48 @@ export default function SwapBox(props) {
     return ratio;
   }, [triggerRatioValue, triggerRatioInverted]);
 
+  const maxToTokenOut = useMemo(() => {
+    const value = toTokenInfo.availableAmount?.gt(toTokenInfo.poolAmount?.sub(toTokenInfo.bufferAmount))
+      ? toTokenInfo.poolAmount?.sub(toTokenInfo.bufferAmount)
+      : toTokenInfo.availableAmount;
+
+    if (!value) {
+      return bigNumberify(0);
+    }
+
+    return value.gt(0) ? value : bigNumberify(0);
+  }, [toTokenInfo]);
+
+  const maxToTokenOutUSD = useMemo(() => {
+    return getUsd(maxToTokenOut, toTokenAddress, false, infoTokens);
+  }, [maxToTokenOut, toTokenAddress, infoTokens]);
+
+  const maxFromTokenInUSD = useMemo(() => {
+    const value = fromTokenInfo.maxUsdgAmount
+      ?.sub(fromTokenInfo.usdgAmount)
+      .mul(expandDecimals(1, USD_DECIMALS))
+      .div(expandDecimals(1, USDG_DECIMALS));
+
+    if (!value) {
+      return bigNumberify(0);
+    }
+
+    return value.gt(0) ? value : bigNumberify(0);
+  }, [fromTokenInfo]);
+
+  const maxFromTokenIn = useMemo(() => {
+    if (!fromTokenInfo.maxPrice) {
+      return bigNumberify(0);
+    }
+    return maxFromTokenInUSD?.mul(expandDecimals(1, fromTokenInfo.decimals)).div(fromTokenInfo.maxPrice).toString();
+  }, [maxFromTokenInUSD, fromTokenInfo]);
+
+  let maxSwapAmountUsd = bigNumberify(0);
+
+  if (maxToTokenOutUSD && maxFromTokenInUSD) {
+    maxSwapAmountUsd = maxToTokenOutUSD.lt(maxFromTokenInUSD) ? maxToTokenOutUSD : maxFromTokenInUSD;
+  }
+
   useEffect(() => {
     if (
       fromToken &&
@@ -397,9 +543,12 @@ export default function SwapBox(props) {
 
   useEffect(() => {
     if (!toTokens.find((token) => token.address === toTokenAddress)) {
-      setToTokenAddress(swapOption, toTokens[0].address);
+      // Only set toTokenAddress to ETH if the current token with toTokenAddress is not disabled
+      if (isToTokenEnabled) {
+        setToTokenAddress(swapOption, toTokens[0].address);
+      }
     }
-  }, [swapOption, toTokens, toTokenAddress, setToTokenAddress]);
+  }, [swapOption, tokens, toTokens, toTokenAddress, setToTokenAddress, isToTokenEnabled]);
 
   useEffect(() => {
     if (swapOption !== SHORT) {
@@ -732,7 +881,7 @@ export default function SwapBox(props) {
       toTokenInfo.availableAmount &&
       toAmount.gt(toTokenInfo.availableAmount)
     ) {
-      return ["Insufficient liquidity"];
+      return ["Insufficient liquidity: exceeds available"];
     }
     if (
       !isWrapOrUnwrap &&
@@ -741,7 +890,7 @@ export default function SwapBox(props) {
       toTokenInfo.poolAmount &&
       toTokenInfo.bufferAmount.gt(toTokenInfo.poolAmount.sub(toAmount))
     ) {
-      return ["Insufficient liquidity"];
+      return ["Insufficient liquidity: exceeds buffer"];
     }
 
     if (
@@ -769,6 +918,9 @@ export default function SwapBox(props) {
     }
     if (hasOutdatedUi) {
       return ["Page outdated, please refresh"];
+    }
+    if (!isToTokenEnabled) {
+      return ["Token currently disabled"];
     }
 
     if (!toAmount || toAmount.eq(0)) {
@@ -1531,6 +1683,189 @@ export default function SwapBox(props) {
       });
   };
 
+  const INCREASE_POSITION = 0;
+  const DECREASE_ORDER = 2;
+  const orderExecutionFee = getConstant(chainId, "DECREASE_ORDER_EXECUTION_GAS_FEE");
+
+  const createIncreasePositionWithOrders = async () => {
+    setIsSubmitting(true);
+
+    const actions = [];
+    const args = [];
+    const values = [];
+
+    // Increase Position Params
+    const tokenAddress0 = fromTokenAddress === AddressZero ? nativeTokenAddress : fromTokenAddress;
+    const indexTokenAddress = toTokenAddress === AddressZero ? nativeTokenAddress : toTokenAddress;
+    let path = [indexTokenAddress]; // assume long
+    if (toTokenAddress !== fromTokenAddress) {
+      path = [tokenAddress0, indexTokenAddress];
+    }
+
+    if (fromTokenAddress === AddressZero && toTokenAddress === nativeTokenAddress) {
+      path = [nativeTokenAddress];
+    }
+
+    if (fromTokenAddress === nativeTokenAddress && toTokenAddress === AddressZero) {
+      path = [nativeTokenAddress];
+    }
+
+    if (isShort) {
+      path = [shortCollateralAddress];
+      if (tokenAddress0 !== shortCollateralAddress) {
+        path = [tokenAddress0, shortCollateralAddress];
+      }
+    }
+
+    const refPrice = isLong ? toTokenInfo.maxPrice : toTokenInfo.minPrice;
+    const priceBasisPoints = isLong ? BASIS_POINTS_DIVISOR + allowedSlippage : BASIS_POINTS_DIVISOR - allowedSlippage;
+    const priceLimit = refPrice.mul(priceBasisPoints).div(BASIS_POINTS_DIVISOR);
+
+    const boundedFromAmount = fromAmount ? fromAmount : bigNumberify(0);
+
+    if (fromAmount && fromAmount.gt(0) && fromTokenAddress === USDG_ADDRESS && isLong) {
+      const { amount: nextToAmount, path: multiPath } = getNextToAmount(
+        chainId,
+        fromAmount,
+        fromTokenAddress,
+        indexTokenAddress,
+        infoTokens,
+        undefined,
+        undefined,
+        usdgSupply,
+        totalTokenWeights
+      );
+      if (nextToAmount.eq(0)) {
+        helperToast.error("Insufficient liquidity");
+        return;
+      }
+      if (multiPath) {
+        path = replaceNativeTokenAddress(multiPath);
+      }
+    }
+
+    const usingETH = fromTokenAddress === AddressZero;
+    const abiCoder = new ethers.utils.AbiCoder();
+
+    const encodedIncreasePositionArgs = abiCoder.encode(
+      ["address[]", "address", "uint256", "uint256", "uint256", "bool", "uint256", "uint256", "bytes32", "bool"],
+      [
+        path, // _path
+        indexTokenAddress, // _indexToken
+        boundedFromAmount, // _amountIn
+        0, // _minOut
+        toUsdMax, // _sizeDelta
+        isLong, // _isLong
+        priceLimit, // _acceptablePrice
+        minExecutionFee, // _executionFee
+        referralCode, // _referralCode
+        usingETH, // _wrap
+      ]
+    );
+
+    actions.push(INCREASE_POSITION);
+    args.push(encodedIncreasePositionArgs);
+    if (usingETH) {
+      values.push(boundedFromAmount.add(minExecutionFee));
+    } else {
+      values.push(minExecutionFee);
+    }
+
+    if (shouldRaiseGasError(getTokenInfo(infoTokens, fromTokenAddress), fromAmount)) {
+      setIsSubmitting(false);
+      setIsPendingConfirmation(false);
+      helperToast.error(
+        `Leave at least ${formatAmount(DUST_BNB, 18, 3)} ${getConstant(chainId, "nativeTokenSymbol")} for gas`
+      );
+      return;
+    }
+
+    if (stopLossTriggerPercent) {
+      actions.push(DECREASE_ORDER);
+      const encodedStopLossArgs = abiCoder.encode(
+        ["address", "uint256", "address", "uint256", "bool", "uint256", "bool"],
+        [
+          indexTokenAddress, // _indexToken
+          toUsdMax, // _sizeDelta
+          isLong ? indexTokenAddress : shortCollateralAddress, // _collateralToken
+          0, // _collateralDelta
+          isLong, // _isLong
+          stopLossTriggerPrice, // _triggerPrice
+          !isLong, // _triggerAboveThreshold
+        ]
+      );
+      args.push(encodedStopLossArgs);
+      values.push(orderExecutionFee);
+    }
+
+    if (takeProfitTriggerPercent) {
+      actions.push(DECREASE_ORDER);
+      const encodedTakeProfitArgs = abiCoder.encode(
+        ["address", "uint256", "address", "uint256", "bool", "uint256", "bool"],
+        [
+          indexTokenAddress, // _indexToken
+          toUsdMax, // _sizeDelta
+          isLong ? indexTokenAddress : shortCollateralAddress, // _collateralToken
+          0, // _collateralDelta
+          isLong, // _isLong
+          takeProfitTriggerPrice, // _triggerPrice
+          isLong, // _triggerAboveThreshold
+        ]
+      );
+      args.push(encodedTakeProfitArgs);
+      values.push(orderExecutionFee);
+    }
+
+    const contractAddress = getContract(chainId, "PositionCreator");
+    const contract = new ethers.Contract(contractAddress, PositionCreator.abi, library.getSigner());
+    const indexToken = getTokenInfo(infoTokens, indexTokenAddress);
+    const tokenSymbol = indexToken.isWrapped ? getConstant(chainId, "nativeTokenSymbol") : indexToken.symbol;
+    let successMsg = `Requested increase of ${tokenSymbol} ${isLong ? "Long" : "Short"} by ${formatAmount(
+      toUsdMax,
+      USD_DECIMALS,
+      2
+    )} USD`;
+    if (stopLossTriggerPercent && takeProfitTriggerPercent) {
+      successMsg += ` with stop loss and take profit orders`;
+    } else if (stopLossTriggerPercent) {
+      successMsg += ` with stop loss order`;
+    } else if (takeProfitTriggerPercent) {
+      successMsg += ` with take profit order`;
+    }
+
+    console.log("contractAddress", contractAddress);
+    console.log("contract", contract);
+
+    await Api.callContract(chainId, contract, "executeMultiple", [actions, args, values], {
+      value: values.reduce((a, b) => a.add(b), bigNumberify(0)),
+      setPendingTxns,
+      sentMsg: `Actions submitted.`,
+      failMsg: `Actions failed.`,
+      successMsg,
+    });
+
+    trackTrade(3, `${isLong ? "Long" : "Short"}`);
+    setIsConfirming(false);
+
+    const key = getPositionKey(account, path[path.length - 1], indexTokenAddress, isLong);
+    let nextSize = toUsdMax;
+    if (hasExistingPosition) {
+      nextSize = existingPosition.size.add(toUsdMax);
+    }
+
+    pendingPositions[key] = {
+      updatedAt: Date.now(),
+      pendingChanges: {
+        size: nextSize,
+      },
+    };
+
+    setPendingPositions({ ...pendingPositions });
+
+    setIsSubmitting(false);
+    setIsPendingConfirmation(false);
+  };
+
   const onSwapOptionChange = (opt) => {
     setSwapOption(opt);
     setAnchorOnFromAmount(true);
@@ -1575,6 +1910,11 @@ export default function SwapBox(props) {
 
     if (orderOption === LIMIT) {
       createIncreaseOrder();
+      return;
+    }
+
+    if (takeProfitTriggerPercent || stopLossTriggerPercent) {
+      createIncreasePositionWithOrders();
       return;
     }
 
@@ -1649,6 +1989,7 @@ export default function SwapBox(props) {
   const showSizeSection = orderOption === STOP;
   const showTriggerPriceSection = !isSwap && !isMarketOrder;
   const showTriggerRatioSection = isSwap && !isMarketOrder;
+  const showMultiTriggerMaker = !isSwap && isMarketOrder;
 
   let fees;
   let feesUsd;
@@ -1817,7 +2158,7 @@ export default function SwapBox(props) {
         fromCurrencyToken: fromToken.symbol,
         leverage: parseFloat(leverage),
         feesUsd: parseFloat(formatAmount(feesUsd, 4, 4, false)),
-        feesUsdFormatted: parseFloat(formatAmount(feesUsd, 4, 4, false).toFixed(2)),
+        feesUsdFormatted: parseFloat(formatAmount(feesUsd, 4, 4, false)?.toFixed(2)) || undefined,
         [`fees${fromToken.symbol}`]: parseFloat(formatAmount(fees, fromToken.decimals, 4, false)),
         walletAddress: account,
         network: NETWORK_NAME[chainId],
@@ -1920,7 +2261,7 @@ export default function SwapBox(props) {
                     chainId={chainId}
                     tokenAddress={fromTokenAddress}
                     onSelectToken={onSelectFromToken}
-                    tokens={fromTokens}
+                    tokens={[]}
                     infoTokens={infoTokens}
                     showMintingCap={false}
                     showTokenImgInDropdown={true}
@@ -1930,7 +2271,12 @@ export default function SwapBox(props) {
               </div>
             </div>
             <div className="Exchange-swap-ball-container">
-              <div className="Exchange-swap-ball" onClick={switchTokens}>
+              <div
+                className={cx("Exchange-swap-ball", {
+                  disabled: !isToTokenEnabled,
+                })}
+                onClick={() => isToTokenEnabled && switchTokens()}
+              >
                 <IoMdSwap className="Exchange-swap-ball-icon" />
               </div>
             </div>
@@ -1967,9 +2313,9 @@ export default function SwapBox(props) {
                   <TokenSelector
                     label={getTokenLabel()}
                     chainId={chainId}
-                    tokenAddress={toTokenAddress}
+                    tokenAddress={checkedToTokenAddress}
                     onSelectToken={onSelectToToken}
-                    tokens={toTokens}
+                    tokens={[]}
                     infoTokens={infoTokens}
                     showTokenImgInDropdown={true}
                     trackAction={trackAction}
@@ -2020,7 +2366,7 @@ export default function SwapBox(props) {
                 <TokenSelector
                   label="To"
                   chainId={chainId}
-                  tokenAddress={toTokenAddress}
+                  tokenAddress={checkedToTokenAddress}
                   onSelectToken={onSelectToToken}
                   tokens={toTokens}
                   infoTokens={infoTokens}
@@ -2124,7 +2470,24 @@ export default function SwapBox(props) {
         )}
         {(isLong || isShort) && (
           <div className="Exchange-leverage-box">
-            <LeverageInput value={leverageOption} onChange={setLeverageOption} max={getMaxLeverage(toToken.symbol)} min={1.1} step={0.01} />
+            <LeverageInput
+              value={leverageOption}
+              onChange={setLeverageOption}
+              max={getMaxLeverage(toToken.symbol)}
+              min={1.1}
+              step={0.01}
+            />
+            {showMultiTriggerMaker && (
+              <TriggerCreator
+                isLong={isLong}
+                leverage={leverageOption}
+                currentPrice={triggerReferencePrice}
+                stopLossTriggerPercent={stopLossTriggerPercent}
+                setStopLossTriggerPercent={setStopLossTriggerPercent}
+                takeProfitTriggerPercent={takeProfitTriggerPercent}
+                setTakeProfitTriggerPercent={setTakeProfitTriggerPercent}
+              />
+            )}
             {isShort && (
               <div className="Exchange-info-row">
                 <div className="Exchange-info-label">Profits In</div>
@@ -2161,6 +2524,34 @@ export default function SwapBox(props) {
                 {leverage && leverage.eq(0) && `-`}
               </div>
             </div>
+            {showMultiTriggerMaker && (
+              <>
+                <div className="Exchange-info-row">
+                  <div className="Exchange-info-label">Trigger Price Stop Loss</div>
+                  <div className="align-right">
+                    ${stopLossTriggerPrice ? formatAmount(stopLossTriggerPrice, USD_DECIMALS, 2, true) : "-"}
+                  </div>
+                </div>
+                <div className="Exchange-info-row">
+                  <div className="Exchange-info-label">Trigger Price Take Profit</div>
+                  <div className="align-right">
+                    ${takeProfitTriggerPrice ? formatAmount(takeProfitTriggerPrice, USD_DECIMALS, 2, true) : "-"}
+                  </div>
+                </div>
+                <div className="Exchange-info-row">
+                  <div className="Exchange-info-label">Trigger PnL Stop Loss</div>
+                  <div className="align-right">
+                    {stopLossTriggerPercent ? `-${limitDecimals(stopLossTriggerPercent * 100, 2)}%` : "-"}
+                  </div>
+                </div>
+                <div className="Exchange-info-row">
+                  <div className="Exchange-info-label">Trigger PnL Take Profit</div>
+                  <div className="align-right">
+                    {stopLossTriggerPrice ? limitDecimals(takeProfitTriggerPercent * 100, 2) + "%" : "-"}
+                  </div>
+                </div>
+              </>
+            )}
             <div className="Exchange-info-row">
               <div className="Exchange-info-label">Entry Price</div>
               <div className="align-right">
@@ -2223,7 +2614,7 @@ export default function SwapBox(props) {
             </ExchangeInfoRow>
           </div>
         )}
-        <div className="Exchange-swap-button-container">
+        {/* <div className="Exchange-swap-button-container">
           <button
             className="App-cta Exchange-swap-button"
             onClick={() => {
@@ -2247,7 +2638,7 @@ export default function SwapBox(props) {
           >
             {getPrimaryText()}
           </button>
-        </div>
+        </div> */}
       </div>
       {isSwap && (
         <div className="Exchange-swap-market-box App-box App-box-border">
@@ -2270,6 +2661,7 @@ export default function SwapBox(props) {
               {getExchangeRateDisplay(getExchangeRate(fromTokenInfo, toTokenInfo), fromToken, toToken)}
             </ExchangeInfoRow>
           )}
+          {renderAvailableLiquidity()}
         </div>
       )}
       {(isLong || isShort) && (
@@ -2376,31 +2768,7 @@ export default function SwapBox(props) {
               </Tooltip>
             </div>
           </div>
-          {renderAvailableLongLiquidity()}
-          {hasMaxAvailableShort && (
-            <div className="Exchange-info-row">
-              <div className="Exchange-info-label">Available Liquidity</div>
-              <div className="align-right">
-                <Tooltip
-                  handle={`${formatAmount(toTokenInfo.maxAvailableShort, USD_DECIMALS, 2, true)}`}
-                  position="right-bottom"
-                  renderContent={() => {
-                    return (
-                      <>
-                        Max {toTokenInfo.symbol} short capacity: $
-                        {formatAmount(toTokenInfo.maxGlobalShortSize, USD_DECIMALS, 2, true)}
-                        <br />
-                        <br />
-                        Current {toTokenInfo.symbol} shorts: $
-                        {formatAmount(toTokenInfo.globalShortSize, USD_DECIMALS, 2, true)}
-                        <br />
-                      </>
-                    );
-                  }}
-                ></Tooltip>
-              </div>
-            </div>
-          )}
+          {renderAvailableLiquidity()}
         </div>
       )}
       <div className="Exchange-swap-market-box App-box App-box-border">
@@ -2460,6 +2828,10 @@ export default function SwapBox(props) {
           chainId={chainId}
           trackAction={trackAction}
           trackTrade={trackTrade}
+          stopLossTriggerPrice={stopLossTriggerPrice}
+          stopLossTriggerPnl={stopLossTriggerPercent}
+          takeProfitTriggerPrice={takeProfitTriggerPrice}
+          takeProfitTriggerPnl={takeProfitTriggerPercent}
         />
       )}
     </div>

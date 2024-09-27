@@ -18,11 +18,8 @@ import OrderBookReader from "./abis/OrderBookReader.json";
 import OrderBook from "./abis/OrderBook.json";
 
 import { getWhitelistedTokens, isValidToken } from "./data/Tokens";
-import ComingSoonTooltip from "./components/Tooltip/ComingSoon";
 import { isAddress } from "ethers/lib/utils";
-import { copyToClipboard } from './utils/common';
 import {
-  REFERRAL_CODE_QUERY_PARAMS,
   CURRENT_PROVIDER_LOCALSTORAGE_KEY,
   WALLET_CONNECT_LOCALSTORAGE_KEY,
   WALLET_LINK_LOCALSTORAGE_PREFIX,
@@ -58,7 +55,7 @@ const GAS_PRICE_ADJUSTMENT_MAP = {
 
 const MAX_GAS_PRICE_MAP = {};
 
-const alchemyWhitelistedDomains = ["swaps.mycelium.xyz"];
+const alchemyWhitelistedDomains = ["swaps.mycelium.xyz", "localhost:3010"];
 
 export function getFallbackArbitrumRpcUrl(useWebsocket) {
   if (useWebsocket) {
@@ -69,9 +66,9 @@ export function getFallbackArbitrumRpcUrl(useWebsocket) {
 export function getDefaultArbitrumRpcUrl(useWebsocket) {
   if (alchemyWhitelistedDomains.includes(window.location.host)) {
     if (useWebsocket) {
-      return "wss://arb-mainnet.g.alchemy.com/v2/SKz5SvTuqIVjE38XsFsy0McZbgfFPOng";
+      return process.env.REACT_APP_ARBITRUM_ONE_RPC_WSS;
     }
-    return "https://arb-mainnet.g.alchemy.com/v2/SKz5SvTuqIVjE38XsFsy0McZbgfFPOng";
+    return process.env.REACT_APP_ARBITRUM_ONE_RPC;
   }
   return getFallbackArbitrumRpcUrl(useWebsocket);
 }
@@ -83,13 +80,10 @@ export function getFallbackArbitrumGoerliRpcUrl(useWebsocket) {
   return "https://goerli-rollup.arbitrum.io/rpc";
 }
 export function getDefaultArbitrumGoerliRpcUrl(useWebsocket) {
-  if (alchemyWhitelistedDomains.includes(window.location.host)) {
-    if (useWebsocket) {
-      return "wss://arb-goerli.g.alchemy.com/v2/sI8AlA8NGlqAZR_28jfPm9JPQQqmsN4U";
-    }
-    return "https://arb-goerli.g.alchemy.com/v2/sI8AlA8NGlqAZR_28jfPm9JPQQqmsN4U";
+  if (useWebsocket) {
+    return process.env.REACT_APP_ARBITRUM_GOERLI_RPC_WSS;
   }
-  return getFallbackArbitrumGoerliRpcUrl(useWebsocket);
+  return process.env.REACT_APP_ARBITRUM_GOERLI_RPC;
 }
 
 const ETHEREUM_RPC_PROVIDERS = ["https://cloudflare-eth.com"];
@@ -340,13 +334,13 @@ export const networkOptions = [
     value: ARBITRUM,
     icon: "ic_arbitrum_24.svg",
     color: "#264f79",
-  },
-  {
-    label: "Testnet",
-    value: ARBITRUM_GOERLI,
-    icon: "ic_arbitrum_24.svg",
-    color: "#264f79",
-  },
+  }
+  // {
+  //   label: "Testnet",
+  //   value: ARBITRUM_GOERLI,
+  //   icon: "ic_arbitrum_24.svg",
+  //   color: "#264f79",
+  // },
 ];
 
 const supportedChainIds = [ARBITRUM, ARBITRUM_GOERLI];
@@ -1862,72 +1856,85 @@ export function useAccountOrders(flagOrdersEnabled, overrideAccount) {
   const shouldRequest = active && account && flagOrdersEnabled;
 
   const orderBookAddress = getContract(chainId, "OrderBook");
+  const oldOrderBookAddress = getContract(chainId, "OldOrderBook");
   const orderBookReaderAddress = getContract(chainId, "OrderBookReader");
-  const key = shouldRequest ? [active, chainId, orderBookAddress, account] : false;
+  const key = shouldRequest ? [active, chainId, orderBookAddress, oldOrderBookAddress, account] : false;
   const {
     data: orders = [],
     mutate: updateOrders,
     error: ordersError,
   } = useSWR(key, {
     dedupingInterval: 5000,
-    fetcher: async (active, chainId, orderBookAddress, account) => {
+    fetcher: async (active, chainId, orderBookAddress, oldOrderBookAddress, account) => {
       const provider = getProvider(library, chainId);
-      const orderBookContract = new ethers.Contract(orderBookAddress, OrderBook.abi, provider);
       const orderBookReaderContract = new ethers.Contract(orderBookReaderAddress, OrderBookReader.abi, provider);
 
-      const fetchLastIndex = async (type) => {
-        const method = type.toLowerCase() + "OrdersIndex";
-        return await orderBookContract[method](account).then((res) => bigNumberify(res._hex).toNumber());
-      };
-
-      const fetchLastIndexes = async () => {
-        const [swap, increase, decrease] = await Promise.all([
-          fetchLastIndex("swap"),
-          fetchLastIndex("increase"),
-          fetchLastIndex("decrease"),
-        ]);
-
-        return { swap, increase, decrease };
-      };
-
-      const getRange = (to, from) => {
-        const LIMIT = 10;
-        const _indexes = [];
-        from = from || Math.max(to - LIMIT, 0);
-        for (let i = to - 1; i >= from; i--) {
-          _indexes.push(i);
-        }
-        return _indexes;
-      };
-
-      const getIndexes = (knownIndexes, lastIndex) => {
-        if (knownIndexes.length === 0) {
-          return getRange(lastIndex);
-        }
-        return [
-          ...knownIndexes,
-          ...getRange(lastIndex, knownIndexes[knownIndexes.length - 1] + 1).sort((a, b) => b - a),
-        ];
-      };
-
-      const getOrders = async (method, knownIndexes, lastIndex, parseFunc) => {
-        const indexes = getIndexes(knownIndexes, lastIndex);
-        const ordersData = await orderBookReaderContract[method](orderBookAddress, account, indexes);
-        const orders = parseFunc(chainId, ordersData, account, indexes);
-
-        return orders;
-      };
+      const orderBookAddresses = [orderBookAddress, oldOrderBookAddress].filter((address) => address !== AddressZero);
 
       try {
-        const lastIndexes = await fetchLastIndexes();
-        const serverIndexes = { swap: [], increase: [], decrease: [] };
+        const ordersByOrderBook = await Promise.all(
+          orderBookAddresses.map(async (orderBookAddress) => {
+            const orderBookContract = new ethers.Contract(orderBookAddress, OrderBook.abi, provider);
 
-        const [swapOrders = [], increaseOrders = [], decreaseOrders = []] = await Promise.all([
-          getOrders("getSwapOrders", serverIndexes.swap, lastIndexes.swap, parseSwapOrdersData),
-          getOrders("getIncreaseOrders", serverIndexes.increase, lastIndexes.increase, parseIncreaseOrdersData),
-          getOrders("getDecreaseOrders", serverIndexes.decrease, lastIndexes.decrease, parseDecreaseOrdersData),
-        ]);
-        return [...swapOrders, ...increaseOrders, ...decreaseOrders];
+            const fetchLastIndex = async (type) => {
+              const method = type.toLowerCase() + "OrdersIndex";
+              return await orderBookContract[method](account).then((res) => bigNumberify(res._hex).toNumber());
+            };
+
+            const fetchLastIndexes = async () => {
+              const [swap, increase, decrease] = await Promise.all([
+                fetchLastIndex("swap", orderBookContract),
+                fetchLastIndex("increase", orderBookContract),
+                fetchLastIndex("decrease", orderBookContract),
+              ]);
+
+              return { swap, increase, decrease };
+            };
+
+            const getRange = (to, from) => {
+              const LIMIT = 10;
+              const _indexes = [];
+              from = from || Math.max(to - LIMIT, 0);
+              for (let i = to - 1; i >= from; i--) {
+                _indexes.push(i);
+              }
+              return _indexes;
+            };
+
+            const getIndexes = (knownIndexes, lastIndex) => {
+              if (knownIndexes.length === 0) {
+                return getRange(lastIndex);
+              }
+              return [
+                ...knownIndexes,
+                ...getRange(lastIndex, knownIndexes[knownIndexes.length - 1] + 1).sort((a, b) => b - a),
+              ];
+            };
+
+            const getOrders = async (method, knownIndexes, lastIndex, parseFunc) => {
+              const indexes = getIndexes(knownIndexes, lastIndex);
+              const ordersData = await orderBookReaderContract[method](orderBookAddress, account, indexes);
+              const orders = parseFunc(chainId, ordersData, account, indexes);
+
+              return orders;
+            };
+
+            const lastIndexes = await fetchLastIndexes();
+            const serverIndexes = { swap: [], increase: [], decrease: [] };
+
+            const [swapOrders = [], increaseOrders = [], decreaseOrders = []] = await Promise.all([
+              getOrders("getSwapOrders", serverIndexes.swap, lastIndexes.swap, parseSwapOrdersData),
+              getOrders("getIncreaseOrders", serverIndexes.increase, lastIndexes.increase, parseIncreaseOrdersData),
+              getOrders("getDecreaseOrders", serverIndexes.decrease, lastIndexes.decrease, parseDecreaseOrdersData),
+            ]);
+            return [...swapOrders, ...increaseOrders, ...decreaseOrders].map((order) => ({
+              ...order,
+              orderBookAddress,
+            }));
+          })
+        );
+
+        return ordersByOrderBook.flat();
       } catch (ex) {
         console.error(ex);
       }
@@ -2298,6 +2305,7 @@ export function setTokenUsingIndexPrices(token, indexPrices, nativeTokenAddress)
 }
 
 export const CHART_PERIODS = {
+  "1m": 60,
   "5m": 60 * 5,
   "15m": 60 * 15,
   "1h": 60 * 60,
@@ -2755,4 +2763,12 @@ export function truncateMiddleEthAddress(address, truncateLength) {
   const trailingCharsNum = strLength - leadingCharsNum - 3;
 
   return `${address.slice(0, leadingCharsNum)}...${address.slice(-trailingCharsNum)}`;
+}
+
+// up until round 13, the round as per the merkle distributor contracts were 0 indexed
+// this meant that round 12 to a human was round 11 in the contracts
+// round 13 (to humans) was set as round 13 in the distributor contract
+// meaning that rounds in the contract are the same as human readable from round 13 onwards
+export function getOffsetRewardRound(round) {
+  return round <= 11 ? round : round + 1
 }

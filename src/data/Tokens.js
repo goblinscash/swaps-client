@@ -9,6 +9,7 @@ const TOKENS = {
       decimals: 18,
       address: "0x4CC823834038c92CFA66C40C7806959529A3D782",
       isShortable: true,
+      isEnabledForTrading: true,
     },
     {
       name: "Ethereum",
@@ -17,6 +18,7 @@ const TOKENS = {
       address: ethers.constants.AddressZero,
       isShortable: true,
       isNative: true,
+      isEnabledForTrading: true,
     },
     {
       name: "Wrapped Ethereum",
@@ -25,6 +27,7 @@ const TOKENS = {
       address: "0x08466D6683d2A39E3597500c1F17b792555FCAB9",
       isWrapped: true,
       baseSymbol: "ETH",
+      isEnabledForTrading: true,
     },
     {
       name: "DAI",
@@ -32,6 +35,7 @@ const TOKENS = {
       decimals: 18,
       address: "0xE5919a1E8Eabc4E819a485A6115b6606E912620F",
       isStable: false,
+      isEnabledForTrading: true,
     },
     {
       name: "PP USD",
@@ -39,6 +43,7 @@ const TOKENS = {
       decimals: 18,
       address: "0xd02C071f5ac809795a22ba50dFB91000929b75BE",
       isStable: true,
+      isEnabledForTrading: true,
     },
     {
       name: "USD Coin",
@@ -46,6 +51,7 @@ const TOKENS = {
       decimals: 18,
       address: "0x263f90bcA00A6E987334D55501Bd8C0D081CeE62",
       isStable: true,
+      isEnabledForTrading: true,
     },
     {
       name: "Tether",
@@ -53,6 +59,7 @@ const TOKENS = {
       decimals: 18,
       address: "0x43B552A6A5B97f120788A8751547D5D953eFBBcA",
       isStable: true,
+      isEnabledForTrading: true,
     },
     {
       name: "Link",
@@ -60,6 +67,7 @@ const TOKENS = {
       decimals: 18,
       address: "0x6E7155bde03E582e9920421Adf14E10C15dBe890",
       isShortable: true,
+      isEnabledForTrading: true,
     },
     {
       name: "Test Token",
@@ -67,6 +75,7 @@ const TOKENS = {
       decimals: 18,
       address: "0xf76A36092f52Ea0ad1dFdDB5aced4e9f414524F2",
       isShortable: true,
+      isEnabledForTrading: true,
     },
   ],
   42161: [
@@ -78,6 +87,7 @@ const TOKENS = {
       isNative: true,
       isShortable: true,
       imageUrl: "https://assets.coingecko.com/coins/images/279/small/ethereum.png?1595348880",
+      isEnabledForTrading: true,
     },
     {
       name: "Wrapped Ethereum",
@@ -87,6 +97,7 @@ const TOKENS = {
       isWrapped: true,
       baseSymbol: "ETH",
       imageUrl: "https://assets.coingecko.com/coins/images/2518/thumb/weth.png?1628852295",
+      isEnabledForTrading: true,
     },
     {
       name: "Bitcoin (WBTC)",
@@ -95,6 +106,7 @@ const TOKENS = {
       address: "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f",
       isShortable: true,
       imageUrl: "https://assets.coingecko.com/coins/images/7598/thumb/wrapped_bitcoin_wbtc.png?1548822744",
+      isEnabledForTrading: true,
     },
     {
       name: "Chainlink",
@@ -104,6 +116,7 @@ const TOKENS = {
       isStable: false,
       isShortable: true,
       imageUrl: "https://assets.coingecko.com/coins/images/877/thumb/chainlink-new-logo.png?1547034700",
+      isEnabledForTrading: true,
     },
     {
       name: "Uniswap",
@@ -121,6 +134,7 @@ const TOKENS = {
       address: "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
       isStable: true,
       imageUrl: "https://assets.coingecko.com/coins/images/6319/thumb/USD_Coin_icon.png?1547042389",
+      isEnabledForTrading: true,
     },
     {
       name: "Tether",
@@ -129,6 +143,7 @@ const TOKENS = {
       address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
       isStable: true,
       imageUrl: "https://assets.coingecko.com/coins/images/325/thumb/Tether-logo.png?1598003707",
+      isEnabledForTrading: true,
     },
     {
       name: "Dai",
@@ -137,6 +152,7 @@ const TOKENS = {
       address: "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1",
       isStable: true,
       imageUrl: "https://assets.coingecko.com/coins/images/9956/thumb/4943.png?1636636734",
+      isEnabledForTrading: true,
     },
     {
       name: "Frax",

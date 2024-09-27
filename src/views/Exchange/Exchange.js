@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
+import React, { useEffect, useState, useMemo, useCallback, forwardRef, useImperativeHandle, useContext } from "react";
 
 import { useWeb3React } from "@web3-react/core";
 import useSWR from "swr";
@@ -32,8 +32,7 @@ import {
   useLocalStorageSerializeKey,
 } from "../../Helpers";
 import { getConstant } from "../../Constants";
-import { approvePlugin } from "../../Api";
-import { useChartPrices } from "../../Api";
+import { approvePlugin, useChartPrices } from "../../Api";
 
 import { getContract } from "../../Addresses";
 import { getTokens, getToken, getWhitelistedTokens, getTokenBySymbol } from "../../data/Tokens";
@@ -56,9 +55,9 @@ import Tab from "../../components/Tab/Tab";
 import "./Exchange.css";
 import SEO from "../../components/Common/SEO";
 import { ExchangeHeader } from "../../components/Exchange/ExchangeHeader";
-import TradingCompBanner from "../../components/Exchange/TradingCompBanner";
-const { AddressZero } = ethers.constants;
+import { LeaderboardContext } from "src/context/LeaderboardContext";
 
+const { AddressZero } = ethers.constants;
 const PENDING_POSITION_VALID_DURATION = 600 * 1000;
 const UPDATED_POSITION_VALID_DURATION = 60 * 1000;
 
@@ -251,8 +250,8 @@ export function getPositions(
         delta: position.pendingDelta,
         totalFees: position.totalFees,
         hasProfit: position.hasProfit,
-        collateral: position.collateral
-      })
+        collateral: position.collateral,
+      });
 
       position.hasProfitAfterFees = hasProfitAfterFees;
       position.pendingDeltaAfterFees = pendingDeltaAfterFees;
@@ -376,6 +375,7 @@ export const Exchange = forwardRef((props, ref) => {
   const { active, account, library } = useWeb3React();
   const { chainId } = useChainId();
   const currentAccount = account;
+  const { updateLeaderboardOptimistically } = useContext(LeaderboardContext);
 
   const nativeTokenAddress = getContract(chainId, "NATIVE_TOKEN");
 
@@ -576,6 +576,7 @@ export const Exchange = forwardRef((props, ref) => {
         )} USD.`;
       }
 
+      updateLeaderboardOptimistically(sizeDelta);
       pushSuccessNotification(chainId, message, e);
     },
 
@@ -601,6 +602,7 @@ export const Exchange = forwardRef((props, ref) => {
         )} USD.`;
       }
 
+      updateLeaderboardOptimistically(sizeDelta);
       pushSuccessNotification(chainId, message, e);
     },
 
@@ -913,8 +915,7 @@ export const Exchange = forwardRef((props, ref) => {
   return (
     <>
       <SEO description="Trade with liquidity, leverage, low fees. Trade with Mycelium. Trade Perpetual Swaps and Perpetual Pools on Ethereum scaling solution, Arbitrum with liquid markets for BTC, ETH, LINK, UNI, CRV, FXS, & BAL." />
-      <TradingCompBanner />
-      <div className="Exchange default-container ReferralsBannerActive">
+      <div className="Exchange default-container">
         <div className="Exchange-content">
           <div className="Exchange-left">
             <div className="ExchangeChart tv">

@@ -7,6 +7,52 @@ import { Link } from "react-router-dom";
 import { shareToTwitter } from "../../utils/common";
 
 const EVENTS = {
+  seenPopupV4: {
+    title: (
+      <>
+        <small>Pool Composition Changes</small>
+      </>
+    ),
+    description: (
+      <>
+        <span>
+          Commencing this week, we are deprecating other assets currently supported in the MLP Composition (UNI, FRAX,
+          FXS, BAL and CRV). During this transition period, there will be a gradual reduction in support for these
+          assets. Meaning there will be increasing limits to trading the assets, and full support to swap the assets for
+          USDC, DAI, USDT, ETH, BTC and LINK, both directly and through aggregators like OpenOcean, until they hit zero
+          composition and are removed entirely from MLP.
+        </span>
+        <span>All open positions with these tokens can be closed.</span>
+        <span>
+          Read more about the changes{" "}
+          <a href="https://mycelium.xyz/blog/mlp-composition-is-about-to-change" className="inline-link">
+            here
+          </a>
+          .
+        </span>
+      </>
+    ),
+  },
+  seenPopupV3: {
+    title: (
+      <>
+        <small>Upcoming Changes</small>
+      </>
+    ),
+    description: (
+      <>
+        <span>
+          Notice to Australian users of Perpetual Swaps, Perpetual Pools, MYC Staking, and the TCR to MYC Token
+          Migration portals.
+        </span>
+        <span>
+          Please note that from 11:59 pm AEST on 16 December 2022, Australian users will be geo-blocked from accessing
+          these subdomains. It is recommended that Australian users close out any involvement they have with these four
+          products before this time.
+        </span>
+      </>
+    ),
+  },
   "new-earn-page": {
     title: (
       <>
@@ -46,34 +92,6 @@ const EVENTS = {
       </span>
     ),
   },
-  "referrals-comp": {
-    title: (
-      <>
-        <h2>
-          Referrals Competition is{" "}
-          <Styled.LiveSpanContainer>
-            <Styled.LiveIcon /> <Styled.GreenText>Live</Styled.GreenText>
-          </Styled.LiveSpanContainer>
-        </h2>
-      </>
-    ),
-    description: (
-      <div>
-        <p>
-          <b>Share your referral code for the chance to win $20,000 USDC in prizes.</b>
-        </p>
-        <p>
-          The most creative referral code tweet wins third prize of $3,000 USDC. You must tag{" "}
-          <a href="https://twitter.com/mycelium_xyz" target="_blank" rel="noopener noreferrer" className="inline-link">
-            @mycelium_xyz
-          </a>{" "}
-          on Twitter to be eligible.
-        </p>
-      </div>
-    ),
-    continueLink: "/referrals#commissions",
-    continueLinkText: "Generate code now",
-  },
 };
 
 export default function EventModal({
@@ -83,6 +101,7 @@ export default function EventModal({
   twitterText,
   eventKey,
   hideHeader,
+  requiresConfirmation,
 }) {
   const event = EVENTS[eventKey];
 
@@ -90,11 +109,14 @@ export default function EventModal({
     const hasSeenEventModal = window.localStorage.getItem(eventKey);
     if (!hasSeenEventModal) {
       setEventModalVisible(true);
-      window.localStorage.setItem(eventKey, "true");
+      if (!requiresConfirmation) {
+        window.localStorage.setItem(eventKey, "true");
+      }
     }
-  }, [eventKey, setEventModalVisible]);
+  }, [eventKey, setEventModalVisible, requiresConfirmation]);
 
-  const onClose = () => {
+  const onContinue = () => {
+    window.localStorage.setItem(eventKey, "true");
     setEventModalVisible(false);
   };
 
@@ -113,7 +135,6 @@ export default function EventModal({
       <Styled.EventModalContent>
         <Styled.EventModalTitle>{event.title}</Styled.EventModalTitle>
         <Styled.EventModalButtonContent className="Button-content">
-          <Styled.EventModalCloseButton onClick={onClose} />
           {event.description}
           {twitterText && (
             <button className="App-button-option App-card-option" onClick={() => shareToTwitter(twitterText)}>
@@ -121,11 +142,11 @@ export default function EventModal({
             </button>
           )}
           {event.continueLink ? (
-            <Link to={event.continueLink} onClick={onClose} className="App-button-option App-card-option">
+            <Link to={event.continueLink} onClick={onContinue} className="App-button-option App-card-option">
               {event.continueLinkText ? event.continueLinkText : `Continue`}
             </Link>
           ) : (
-            <button className="App-button-option App-card-option" onClick={onClose}>
+            <button className="App-button-option App-card-option" onClick={onContinue}>
               {event.continueLinkText ? event.continueLinkText : `Continue`}
             </button>
           )}
